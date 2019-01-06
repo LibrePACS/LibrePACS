@@ -100,7 +100,6 @@ services:
 
 # Docker private networks
 networks:
-  # Database and AMQP communications network
   librepacs_network:
     driver: bridge
     name: lb_librepacs_network
