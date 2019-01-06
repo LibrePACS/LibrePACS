@@ -4,7 +4,7 @@ git pull
 docker-compose down
 
 # base python 3 images
-cd ./AlpineBase38Py3
+cd ./Alpine38Py3
 docker build -t librepacs/lbalpine38py3 --build-arg ALPMIRROR=10.0.0.122 --build-arg PIPMIRROR=pypi.python.org .
 
 # move here so all the "deps" are built first
