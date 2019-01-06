@@ -1,0 +1,109 @@
+version: '3.5'
+# LibrePACS
+
+# Volumes are HOST directory and then CONTAINER directory
+
+services:
+  # Postgresql server
+  database:
+    build:
+      context: ./Database
+      args:
+        ALPMIRROR: dl-cdn.alpinelinux.org
+        PIPMIRROR: pypi.python.org
+    environment:
+      - POSTGRES_DB=${DBDATABASE}
+      - POSTGRES_USER=${DBUSER}
+      - POSTGRES_PASSWORD=${DBPASS}
+    container_name: lbdatabase
+    volumes:
+      - ./data/postgresql:/var/lib/postgresql
+    networks:
+      - librepacs_network
+    restart: unless-stopped
+
+  # runs the nginx proxy service
+  nginx:
+    build:
+      context: ./WebSSLProxy
+      args:
+        ALPMIRROR: dl-cdn.alpinelinux.org
+        PIPMIRROR: pypi.python.org
+    container_name: mknginx
+    entrypoint: /usr/bin/wait-for-it-ash.sh -h webserver -p 8080 -t 30 -- nginx
+    volumes:
+      - ./data/nginx:/var/log/librepacs/nginx
+      - ./data/certs:/etc/nginx/certs:ro
+      - lbvol-static:/librepacs/web_app/librepacs/static:ro
+    ports:
+      - "8900:8900"
+    networks:
+      - librepacs_network
+    restart: unless-stopped
+
+  # pgbouncer
+  pgbounce:
+    build:
+      context: ./PGBouncer
+      args:
+        ALPMIRROR: dl-cdn.alpinelinux.org
+        PIPMIRROR: pypi.python.org
+    environment:
+      - DB_HOST=${DBHOST}
+      - DB_USER=${DBUSER}
+      - DB_PASSWORD=${DBPASS}
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=500
+      - DEFAULT_POOL_SIZE=85
+      - SERVER_RESET_QUERY=DISCARD ALL
+    container_name: lbpgbounce
+    depends_on:
+      - database
+    entrypoint: ./wait-for-it-ash.sh -h database -p 5432 -t 30 -- ./entrypoint.sh
+    networks:
+      - librepacs_network
+    restart: unless-stopped
+
+  # Runs the web service for the main server application
+  webserver:
+    build:
+      context: ./WebServer
+      args:
+        ALPMIRROR: dl-cdn.alpinelinux.org
+        PIPMIRROR: pypi.python.org
+    environment:
+      - POSTGRES_DB=${DBDATABASE}
+      - POSTGRES_USER=${DBUSER}
+      - POSTGRES_PASSWORD=${DBPASS}
+      - SECURE=${SECURE}
+      - DEBUG=${DEBUG}
+      - HOST_IP=${HOST_IP}
+    container_name: lbwebapp
+    depends_on:
+      - pgbounce
+      - redis
+      - nginx
+    entrypoint: ./wait-for-it-ash.sh -h pgbounce -p 6432 -t 30 -- uwsgi --socket 0.0.0.0:8080 --protocol http --chdir=./web_app --ini ./web_app/librepacs_uwsgi_alpine.ini
+    volumes:
+      # must not be read only as it stores cache here
+      - lbvol-static:/librepacs/web_app/librepacs/static
+      - ./data/webkey:/librepacs/key
+      # needed to show docker/swarm info
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # hold log files
+      - ./data/log:/librepacs/log
+      # server will generate salt/key
+      - /var/opt/librepacs/secure:/librepacs/secure:ro
+    networks:
+      - librepacs_network
+    restart: unless-stopped
+
+# Docker private networks
+networks:
+  # Database and AMQP communications network
+  librepacs_network:
+    driver: bridge
+    name: lb_librepacs_network
+
+volumes:
+     lbvol-static:
