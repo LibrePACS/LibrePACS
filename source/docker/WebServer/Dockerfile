@@ -52,8 +52,7 @@ RUN sed -i "s/dl-cdn.alpinelinux.org/${ALPMIRROR}/" /etc/apk/repositories \
   py-setuptools \
   && cp /usr/lib/uwsgi/python3_plugin.so /librepacs/. \
   && rm -rf /var/cache/apk/* \
-  && rc-update add netmount \
-  && rc-update add rpcbind
+  && rc-update add netmount
 
 ADD wait-for-it-ash.sh /librepacs
 # Copy the source files for the app

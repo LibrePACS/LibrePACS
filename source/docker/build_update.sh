@@ -13,4 +13,5 @@ docker-compose build
 # containers here and later are "standalone" with no deps
 
 # retag all the images - need to back out of docker/alpine as well as docker directory for container
+cd ..
 ./tag_rename_images.sh
